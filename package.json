@@ -10,15 +10,22 @@
     "eject": "expo eject"
   },
   "dependencies": {
+    "axios": "0.27.2",
     "expo": "^47.0.0",
     "expo-av": "~13.0.1",
     "expo-camera": "~13.0.0",
+    "expo-file-system": "^15.1.1",
     "expo-media-library": "~15.0.0",
     "expo-sharing": "~11.0.1",
     "expo-status-bar": "~1.4.2",
+    "fs": "^0.0.1-security",
+    "node-fetch": "2.6.1",
+    "prop-types": "^15.8.1",
     "react": "18.1.0",
     "react-dom": "18.1.0",
     "react-native": "0.70.5",
+    "react-native-fs": "^2.20.0",
+    "react-native-table-component": "https://github.com/slice312/react-native-table-component.git",
     "react-native-web": "~0.18.7"
   },
   "devDependencies": {

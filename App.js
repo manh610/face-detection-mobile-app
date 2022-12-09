@@ -1,9 +1,11 @@
-import { StyleSheet, Text, View, Button, SafeAreaView, TouchableOpacity, Image } from 'react-native';
+import { StyleSheet, Text, View, Button, SafeAreaView, TouchableOpacity, Image, ScrollView, ActivityIndicator } from 'react-native';
 import { useEffect, useState, useRef } from 'react';
 import { Camera } from 'expo-camera';
 import { Video } from 'expo-av';
-import { shareAsync } from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
+import DetectServiceAPI from './detect-service';
+import { Table, Row, Rows } from 'react-native-table-component';
 
 export default function App() {
 
@@ -16,6 +18,11 @@ export default function App() {
     const [isRecording, setIsRecording] = useState(false);
     const [video, setVideo] = useState();
 	const [photo, setPhoto] = useState();
+	const [resDetect, setResDetect] = useState(false);
+	const [labelFace, setLabelFace] = useState("");
+	const header = ['STT', 'Name']
+	const [dataVideo, setDataVideo] = useState([]);
+	const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
 		if ( isCam ) {
@@ -59,8 +66,45 @@ export default function App() {
 		// await cameraRef.current.pausePreview();
 	}
 
-	const requestDetect = () => {
-		console.log('request to server to detect')
+	const requestDetectImage = async () => {
+		setIsLoading(true);
+		console.log('request to server to detect image')
+		const base64 = await FileSystem.readAsStringAsync(photo.uri, { encoding: 'base64' });
+		const data = await DetectServiceAPI.detectImage(base64);
+		console.log('data receive:', data)
+		setIsLoading(false);
+		setResDetect(true);
+		setLabelFace(data.id);
+	}
+
+	const requestDetectVideo = async () => {
+		setIsLoading(true);
+		console.log('request to server to detect video')
+		const base64 = await FileSystem.readAsStringAsync(video.uri, { encoding: 'base64' });
+		let data = await DetectServiceAPI.detectVideo(base64);
+		console.log('data receive detect video:', data)
+		setResDetect(true);
+		let stt = 1;
+		data = data.slice(1, data.length-1)
+		const array = data.split(', ');
+		console.log('array: ', array);
+		let tmpData = [];
+		if ( array[0].length > 0 ) {
+			for( let i = 0; i < array.length; i++) {
+				const tmp = [stt, array[i].slice(1, array[i].length-1)];
+				tmpData.push(tmp);
+				stt++;
+			}
+		}
+		setIsLoading(false);
+		setDataVideo(tmpData);
+		console.log('data Video', tmpData)
+	}
+
+	const again = () => {
+		setPhoto(undefined)
+		setVideo(undefined);
+		setResDetect(false);
 	}
 
 	if ( photo ) {
@@ -72,19 +116,26 @@ export default function App() {
 		return (
 			<SafeAreaView style={styles.containerTmp}>
 				<Image style={{height: '95%', width: '100%'}} source={{uri: photo.uri}} />
-				<View style={styles.btnAfter}>
+				{isLoading && <ActivityIndicator style={{position: 'absolute'}} size={60} color="#FF5A80" />}
+				{!resDetect &&<View style={styles.btnAfter}>
 					{
 						hasMediaLibraryPermission && <TouchableOpacity style={styles.btnSave} onPress={() => savePhoto()}>
 							<Text>SAVE</Text>
 						</TouchableOpacity>
 					}
-					<TouchableOpacity style={styles.btnDetect} onPress={() => requestDetect()}>
+					<TouchableOpacity style={styles.btnDetect} onPress={() => requestDetectImage()}>
 						<Text>DETECT</Text>
 					</TouchableOpacity>
 					<TouchableOpacity style={styles.btnDiscard} onPress={() => setPhoto(undefined)}>
 						<Text>DISCARD</Text>
 					</TouchableOpacity>
-				</View>
+				</View>}
+				{resDetect && <View style={styles.btnRes}>
+					<Text>LABEL: {labelFace}</Text>	
+					<TouchableOpacity style={styles.btnDiscard} onPress={again}>
+						<Text>AGAIN</Text>
+					</TouchableOpacity>
+				</View>}
 			</SafeAreaView>
 		)
 	}
@@ -99,26 +150,46 @@ export default function App() {
 
 		return (
 			<SafeAreaView style={styles.containerTmp}>
-				<Video
+				{ !resDetect && <Video
 					style={styles.video}
 					source={{uri: video.uri}}
 					useNativeControls
 					resizeMode='contain'
 					isLooping
-				/>
-				<View style={styles.btnAfter}>
+				/> }
+				{isLoading && <ActivityIndicator style={{position: 'absolute'}} size={60} color="#FF5A80" />}
+				{!resDetect && <View style={styles.btnAfter}>
 					{
 						hasMediaLibraryPermission && <TouchableOpacity style={styles.btnSave} onPress={() => saveVideo()}>
 							<Text>SAVE</Text>
 						</TouchableOpacity>
 					}
-					<TouchableOpacity style={styles.btnDetect} onPress={() => requestDetect()}>
+					<TouchableOpacity style={styles.btnDetect} onPress={() => requestDetectVideo()}>
 						<Text>DETECT</Text>
 					</TouchableOpacity>
 					<TouchableOpacity style={styles.btnDiscard} onPress={() => setVideo(undefined)}>
 						<Text>DISCARD</Text>
 					</TouchableOpacity>
-				</View>
+				</View>}
+				{resDetect && <ScrollView nestedScrollEnabled={true} style={{marginTop: '20%'}}>
+					<Text style={{fontWeight: '900', color:'red'}}>LIST LABEL ({dataVideo.length} people): </Text>	
+					<Table borderStyle={{borderWidth: 1, borderColor: '#FF5A80'}}>
+						<Row data={header} />
+						{
+							dataVideo.map((dataRow, index) => (
+								<Row
+									key={index}
+									data={dataRow}
+									style={[styles.row, index%2 && {backgroundColor: '#ffffff'}]}
+									textStyle={styles.text}
+								/>
+							))
+						}
+					</Table>
+					<TouchableOpacity style={styles.btnDiscard} onPress={again}>
+						<Text>AGAIN</Text>
+					</TouchableOpacity>
+				</ScrollView>}
 			</SafeAreaView>
 		);
     }
@@ -231,6 +302,14 @@ export default function App() {
 		borderRadius: 15
 	},
 	btnAfter: {
+		display: 'flex',
+		flexDirection: 'row',
+		width: '90%',
+		justifyContent: 'space-around',
+		marginBottom: '5%'
+	},
+	btnRes: {
+		marginTop: '2%',
 		display: 'flex',
 		flexDirection: 'row',
 		width: '90%',
